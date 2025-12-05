@@ -1,3 +1,15 @@
+// Copyright (c) 2025 Contributors to the Eclipse Foundation
+//
+// See the NOTICE file(s) distributed with this work for additional
+// information regarding copyright ownership.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Apache Software License 2.0 which is available at
+// https://www.apache.org/licenses/LICENSE-2.0, or the MIT license
+// which is available at https://opensource.org/licenses/MIT.
+//
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 using Iceoryx2.SafeHandles;
 using System;
 using System.Runtime.InteropServices;
@@ -97,13 +109,13 @@ public sealed class Sample<T> : IDisposable where T : unmanaged
     public unsafe ref T GetPayloadRef()
     {
         ThrowIfDisposed();
-        
+
         if (!_handle.IsMutable)
             throw new InvalidOperationException("Cannot get mutable reference to read-only sample. Use GetPayloadRefReadOnly() instead.");
 
         var sampleHandle = _handle.DangerousGetHandle();
         IntPtr payloadPtr;
-        
+
         Native.Iox2NativeMethods.iox2_sample_mut_payload_mut_ptr(
             ref sampleHandle,
             out payloadPtr,
@@ -123,10 +135,10 @@ public sealed class Sample<T> : IDisposable where T : unmanaged
     public unsafe ref readonly T GetPayloadRefReadOnly()
     {
         ThrowIfDisposed();
-        
+
         var sampleHandle = _handle.DangerousGetHandle();
         IntPtr payloadPtr;
-        
+
         if (_handle.IsMutable)
         {
             Native.Iox2NativeMethods.iox2_sample_mut_payload_mut_ptr(

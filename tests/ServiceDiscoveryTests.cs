@@ -120,7 +120,7 @@ public class ServiceDiscoveryTests
                     .Expect("Failed to list services");
 
                 Assert.NotNull(services);
-                
+
                 // Note: Due to the simplified constructor (to avoid union marshaling issues),
                 // PublishSubscribeConfig will be null. We can only verify the service list works.
                 // Pattern-specific configs will be null until we solve the union marshaling problem.
