@@ -743,6 +743,11 @@ internal static partial class Iox2NativeMethods
         UIntPtr value);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void iox2_port_factory_publisher_builder_set_initial_max_slice_len(
+        ref IntPtr publisher_builder_handle,
+        UIntPtr value);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int iox2_port_factory_publisher_builder_create(
         IntPtr publisher_builder_handle,
         IntPtr publisher_struct_ptr,  // Changed to IntPtr to allow passing NULL

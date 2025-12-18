@@ -23,14 +23,25 @@ public sealed class Sample<T> : IDisposable where T : unmanaged
 {
     private SafeSampleHandle _handle;
     private bool _disposed;
+    private readonly int _numberOfElements;
 
-    internal Sample(SafeSampleHandle handle)
+    internal Sample(SafeSampleHandle handle, int numberOfElements = 1)
     {
         _handle = handle ?? throw new ArgumentNullException(nameof(handle));
+        _numberOfElements = numberOfElements;
     }
 
     /// <summary>
+    /// Gets the number of elements in this sample.
+    /// For single-element samples (loaned via Loan()), this is 1.
+    /// For slice samples (loaned via LoanSlice()), this is the number of elements in the slice.
+    /// </summary>
+    public int Length => _numberOfElements;
+
+    /// <summary>
     /// Gets or sets the payload data.
+    /// For single-element samples only (Length == 1).
+    /// For slice samples, use PayloadAsSpan instead.
     /// </summary>
     public unsafe T Payload
     {
@@ -158,6 +169,72 @@ public sealed class Sample<T> : IDisposable where T : unmanaged
             throw new InvalidOperationException("Failed to get sample payload");
 
         return ref System.Runtime.CompilerServices.Unsafe.AsRef<T>(payloadPtr.ToPointer());
+    }
+
+    /// <summary>
+    /// Gets the payload as a Span for zero-copy access to slice data.
+    /// This works for both single-element samples (Length == 1) and slice samples (Length > 1).
+    /// For mutable samples (loaned from publisher), the span is writable.
+    /// For read-only samples (received by subscriber), use PayloadAsReadOnlySpan instead.
+    /// </summary>
+    public unsafe Span<T> PayloadAsSpan
+    {
+        get
+        {
+            ThrowIfDisposed();
+
+            if (!_handle.IsMutable)
+                throw new InvalidOperationException("Cannot get mutable span for read-only sample. Use PayloadAsReadOnlySpan instead.");
+
+            var sampleHandle = _handle.DangerousGetHandle();
+            IntPtr payloadPtr;
+
+            Native.Iox2NativeMethods.iox2_sample_mut_payload_mut_ptr(
+                ref sampleHandle,
+                out payloadPtr,
+                IntPtr.Zero);
+
+            if (payloadPtr == IntPtr.Zero)
+                throw new InvalidOperationException("Failed to get sample payload");
+
+            return new Span<T>(payloadPtr.ToPointer(), _numberOfElements);
+        }
+    }
+
+    /// <summary>
+    /// Gets the payload as a read-only Span for zero-copy access to slice data.
+    /// This works for both single-element samples (Length == 1) and slice samples (Length > 1).
+    /// Works for both loaned samples (mutable) and received samples (read-only).
+    /// </summary>
+    public unsafe ReadOnlySpan<T> PayloadAsReadOnlySpan
+    {
+        get
+        {
+            ThrowIfDisposed();
+
+            var sampleHandle = _handle.DangerousGetHandle();
+            IntPtr payloadPtr;
+
+            if (_handle.IsMutable)
+            {
+                Native.Iox2NativeMethods.iox2_sample_mut_payload_mut_ptr(
+                    ref sampleHandle,
+                    out payloadPtr,
+                    IntPtr.Zero);
+            }
+            else
+            {
+                Native.Iox2NativeMethods.iox2_sample_payload(
+                    ref sampleHandle,
+                    out payloadPtr,
+                    out _);
+            }
+
+            if (payloadPtr == IntPtr.Zero)
+                throw new InvalidOperationException("Failed to get sample payload");
+
+            return new ReadOnlySpan<T>(payloadPtr.ToPointer(), _numberOfElements);
+        }
     }
 
     /// <summary>

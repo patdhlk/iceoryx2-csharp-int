@@ -57,7 +57,43 @@ public sealed class Publisher : IDisposable
                 return Result<Sample<T>, Iox2Error>.Err(Iox2Error.SampleLoanFailed);
 
             var handle = new SafeSampleHandle(sampleHandle, isMutable: true);
-            var sample = new Sample<T>(handle);
+            var sample = new Sample<T>(handle, numberOfElements: 1);
+
+            return Result<Sample<T>, Iox2Error>.Ok(sample);
+        }
+        catch (Exception)
+        {
+            return Result<Sample<T>, Iox2Error>.Err(Iox2Error.SampleLoanFailed);
+        }
+    }
+
+    /// <summary>
+    /// Loans a slice (array) of samples for sending data.
+    /// This allows sending multiple elements in a single zero-copy operation.
+    /// </summary>
+    /// <param name="numberOfElements">The number of elements to allocate in the slice</param>
+    /// <returns>A Result containing a Sample with a slice payload, or an error</returns>
+    public Result<Sample<T>, Iox2Error> LoanSlice<T>(ulong numberOfElements) where T : unmanaged
+    {
+        ThrowIfDisposed();
+
+        if (numberOfElements == 0)
+            throw new ArgumentException("Number of elements must be greater than 0", nameof(numberOfElements));
+
+        try
+        {
+            var publisherHandle = _handle.DangerousGetHandle();
+            var result = Native.Iox2NativeMethods.iox2_publisher_loan_slice_uninit(
+                ref publisherHandle,
+                IntPtr.Zero,
+                out var sampleHandle,
+                (UIntPtr)numberOfElements);
+
+            if (result != Native.Iox2NativeMethods.IOX2_OK || sampleHandle == IntPtr.Zero)
+                return Result<Sample<T>, Iox2Error>.Err(Iox2Error.SampleLoanFailed);
+
+            var handle = new SafeSampleHandle(sampleHandle, isMutable: true);
+            var sample = new Sample<T>(handle, numberOfElements: (int)numberOfElements);
 
             return Result<Sample<T>, Iox2Error>.Ok(sample);
         }

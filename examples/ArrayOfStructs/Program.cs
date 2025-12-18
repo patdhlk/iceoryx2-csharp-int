@@ -11,10 +11,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 using Iceoryx2;
-using System;
 using System.Runtime.InteropServices;
 
-namespace ArrayOfStructsExample;
+namespace ArrayOfStructs;
 
 /// <summary>
 /// Simple struct to be used in arrays.
@@ -101,9 +100,9 @@ class Program
             {
                 case "publisher":
                     if (dataType == "sensor")
-                        RunPublisher<SensorReading>("array-sensor-service", CreateSensorArray);
+                        RunPublisher("array-sensor-service", CreateSensorArray);
                     else
-                        RunPublisher<Particle>("array-particle-service", CreateParticleArray);
+                        RunPublisher("array-particle-service", CreateParticleArray);
                     break;
 
                 case "subscriber":
@@ -138,14 +137,17 @@ class Program
             .Expect("Failed to create node");
 
         // Open or create the service for arrays of T
-        // The service will handle slices/arrays of the struct type
+        // Enable dynamic payloads to support variable-length slices
         using var service = node.ServiceBuilder()
             .PublishSubscribe<T>()
+            .EnableDynamicPayloads()  // Required for slice support
             .Open(serviceName)
             .Expect($"Failed to open service '{serviceName}'");
 
-        // Create a publisher
-        using var publisher = service.CreatePublisher()
+        // Create a publisher with initial max slice length
+        using var publisher = service.PublisherBuilder()
+            .InitialMaxSliceLen(100)  // Support up to 100 elements per slice
+            .Create()
             .Expect("Failed to create publisher");
 
         Console.WriteLine("✅ Publisher created successfully.");
@@ -155,20 +157,19 @@ class Program
         while (true)
         {
             // Generate an array of structs
-            var arraySize = 5 + (iteration % 6); // Vary array size from 5 to 10
             var dataArray = createArrayFunc(iteration);
 
             Console.WriteLine($"📦 Iteration {iteration}: Sending array of {dataArray.Length} {typeof(T).Name} structs");
 
             // Loan a slice (array) - this allocates shared memory for the entire array
-            var sample = publisher.LoanSlice((ulong)dataArray.Length)
+            var sample = publisher.LoanSlice<T>((ulong)dataArray.Length)
                 .Expect("Failed to loan slice");
 
             try
             {
                 // Get the payload as a span and copy our data into it
-                var payload = sample.Payload;
-                
+                var payload = sample.PayloadAsSpan;
+
                 // Copy the array into the loaned slice
                 for (int i = 0; i < dataArray.Length && i < payload.Length; i++)
                 {
@@ -189,7 +190,7 @@ class Program
             }
 
             iteration++;
-            System.Threading.Thread.Sleep(2000); // Send every 2 seconds
+            Thread.Sleep(2000); // Send every 2 seconds
         }
     }
 
@@ -205,9 +206,10 @@ class Program
             .Create()
             .Expect("Failed to create node");
 
-        // Open the service
+        // Open the service (must match publisher's configuration)
         using var service = node.ServiceBuilder()
             .PublishSubscribe<T>()
+            .EnableDynamicPayloads()  // Required for slice support
             .Open(serviceName)
             .Expect($"Failed to open service '{serviceName}'");
 
@@ -232,16 +234,16 @@ class Program
                 {
                     using (sample)
                     {
-                        var payload = sample.Payload;
-                        
+                        var payload = sample.PayloadAsReadOnlySpan;
+
                         Console.WriteLine($"📬 Received array with {payload.Length} elements:");
-                        
+
                         // Process each struct in the array
                         for (int i = 0; i < payload.Length; i++)
                         {
                             Console.WriteLine($"   [{i}] {payload[i]}");
                         }
-                        
+
                         receivedCount++;
                         Console.WriteLine($"✅ Total arrays received: {receivedCount}\n");
                     }
@@ -250,12 +252,11 @@ class Program
             }
             else
             {
-                var error = receiveResult.UnwrapErr();
-                Console.WriteLine($"❌ Error receiving: {error}");
+                Console.WriteLine($"❌ Error receiving");
                 break;
             }
 
-            System.Threading.Thread.Sleep(100); // Poll every 100ms
+            Thread.Sleep(100); // Poll every 100ms
         }
     }
 
@@ -264,9 +265,9 @@ class Program
     {
         var arraySize = 5 + (iteration % 6);
         var particles = new Particle[arraySize];
-        
+
         var random = new Random(iteration); // Deterministic for demo
-        
+
         for (int i = 0; i < arraySize; i++)
         {
             particles[i] = new Particle(
@@ -277,7 +278,7 @@ class Program
                 id: iteration * 100 + i
             );
         }
-        
+
         return particles;
     }
 
@@ -286,10 +287,10 @@ class Program
     {
         var arraySize = 5 + (iteration % 6);
         var readings = new SensorReading[arraySize];
-        
+
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var random = new Random(iteration);
-        
+
         for (int i = 0; i < arraySize; i++)
         {
             readings[i] = new SensorReading(
@@ -300,7 +301,7 @@ class Program
                 sensorId: (ushort)(100 + i)
             );
         }
-        
+
         return readings;
     }
 }

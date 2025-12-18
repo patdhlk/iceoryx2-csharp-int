@@ -28,10 +28,23 @@ public sealed class PublishSubscribeServiceBuilder<T> where T : unmanaged
     private ulong? _subscriberMaxBorrowedSamples;
     private ulong? _historySize;
     private bool? _enableSafeOverflow;
+    private bool _enableDynamicPayloads;
 
     internal PublishSubscribeServiceBuilder(Node node)
     {
         _node = node ?? throw new ArgumentNullException(nameof(node));
+    }
+
+    /// <summary>
+    /// Enables support for dynamic-sized payloads (slices/arrays).
+    /// When enabled, publishers can use LoanSlice() to send variable-length arrays.
+    /// Publishers must set InitialMaxSliceLen() when using this feature.
+    /// </summary>
+    /// <returns>This builder for method chaining</returns>
+    public PublishSubscribeServiceBuilder<T> EnableDynamicPayloads()
+    {
+        _enableDynamicPayloads = true;
+        return this;
     }
 
     /// <summary>
@@ -208,9 +221,14 @@ public sealed class PublishSubscribeServiceBuilder<T> where T : unmanaged
                     }
                 }
 
+                // Use DYNAMIC type variant if dynamic payloads are enabled, otherwise FIXED_SIZE
+                var typeVariant = _enableDynamicPayloads
+                    ? Native.Iox2NativeMethods.iox2_type_variant_e.DYNAMIC
+                    : Native.Iox2NativeMethods.iox2_type_variant_e.FIXED_SIZE;
+
                 var typeResult = Native.Iox2NativeMethods.iox2_service_builder_pub_sub_set_payload_type_details(
                     ref pubSubBuilderHandle,  // Pass by reference - C expects pointer to handle
-                    Native.Iox2NativeMethods.iox2_type_variant_e.FIXED_SIZE,
+                    typeVariant,
                     typeName,
                     System.Text.Encoding.UTF8.GetByteCount(typeName),
                     typeSize,

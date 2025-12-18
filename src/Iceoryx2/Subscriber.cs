@@ -59,7 +59,15 @@ public sealed class Subscriber : IDisposable
                 return Result<Sample<T>?, Iox2Error>.Ok(null);
 
             var handle = new SafeSampleHandle(sampleHandle, isMutable: false);
-            var sample = new Sample<T>(handle);
+
+            // Get the number of elements in the received sample
+            Native.Iox2NativeMethods.iox2_sample_payload(
+                ref sampleHandle,
+                out _,
+                out var payloadLen);
+
+            var numberOfElements = (int)payloadLen;
+            var sample = new Sample<T>(handle, numberOfElements);
 
             return Result<Sample<T>?, Iox2Error>.Ok(sample);
         }

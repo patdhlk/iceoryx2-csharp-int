@@ -43,6 +43,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceDiscovery", "example
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TaskCommunication", "examples\TaskCommunication\TaskCommunication.csproj", "{7F8E9D0A-1B2C-3D4E-5F6A-7B8C9D0E1F2A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ArrayOfStructs", "examples\ArrayOfStructs\ArrayOfStructs.csproj", "{3F880AD9-6564-44C4-BCE0-4B841AD46F4A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -269,6 +271,18 @@ Global
 		{7F8E9D0A-1B2C-3D4E-5F6A-7B8C9D0E1F2A}.Release|x64.Build.0 = Release|Any CPU
 		{7F8E9D0A-1B2C-3D4E-5F6A-7B8C9D0E1F2A}.Release|x86.ActiveCfg = Release|Any CPU
 		{7F8E9D0A-1B2C-3D4E-5F6A-7B8C9D0E1F2A}.Release|x86.Build.0 = Release|Any CPU
+		{3F880AD9-6564-44C4-BCE0-4B841AD46F4A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3F880AD9-6564-44C4-BCE0-4B841AD46F4A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3F880AD9-6564-44C4-BCE0-4B841AD46F4A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3F880AD9-6564-44C4-BCE0-4B841AD46F4A}.Debug|x64.Build.0 = Debug|Any CPU
+		{3F880AD9-6564-44C4-BCE0-4B841AD46F4A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3F880AD9-6564-44C4-BCE0-4B841AD46F4A}.Debug|x86.Build.0 = Debug|Any CPU
+		{3F880AD9-6564-44C4-BCE0-4B841AD46F4A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3F880AD9-6564-44C4-BCE0-4B841AD46F4A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3F880AD9-6564-44C4-BCE0-4B841AD46F4A}.Release|x64.ActiveCfg = Release|Any CPU
+		{3F880AD9-6564-44C4-BCE0-4B841AD46F4A}.Release|x64.Build.0 = Release|Any CPU
+		{3F880AD9-6564-44C4-BCE0-4B841AD46F4A}.Release|x86.ActiveCfg = Release|Any CPU
+		{3F880AD9-6564-44C4-BCE0-4B841AD46F4A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -290,5 +304,6 @@ Global
 		{6E49893E-EBFA-46BE-BE18-E1C1CC1F186F} = {BC3A1E43-FC68-4656-A0AC-705B63F41D3C}
 		{B8D63E2A-B1F4-47A4-8793-B117D9649369} = {BC3A1E43-FC68-4656-A0AC-705B63F41D3C}
 		{7F8E9D0A-1B2C-3D4E-5F6A-7B8C9D0E1F2A} = {BC3A1E43-FC68-4656-A0AC-705B63F41D3C}
+		{3F880AD9-6564-44C4-BCE0-4B841AD46F4A} = {BC3A1E43-FC68-4656-A0AC-705B63F41D3C}
 	EndGlobalSection
 EndGlobal

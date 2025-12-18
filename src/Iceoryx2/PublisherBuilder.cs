@@ -22,6 +22,7 @@ public sealed class PublisherBuilder
 {
     private readonly Service _service;
     private ulong? _maxLoanedSamples;
+    private ulong? _initialMaxSliceLen;
 
     internal PublisherBuilder(Service service)
     {
@@ -37,6 +38,19 @@ public sealed class PublisherBuilder
     public PublisherBuilder MaxLoanedSamples(ulong value)
     {
         _maxLoanedSamples = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the initial maximum slice length for dynamic payloads.
+    /// This is required when using LoanSlice() to send variable-length arrays.
+    /// The service must be opened with DYNAMIC type variant for this to work.
+    /// </summary>
+    /// <param name="value">Initial maximum number of elements in a slice</param>
+    /// <returns>This builder for method chaining</returns>
+    public PublisherBuilder InitialMaxSliceLen(ulong value)
+    {
+        _initialMaxSliceLen = value;
         return this;
     }
 
@@ -62,6 +76,12 @@ public sealed class PublisherBuilder
             {
                 Native.Iox2NativeMethods.iox2_port_factory_publisher_builder_set_max_loaned_samples(
                     ref publisherBuilderHandle, new UIntPtr(_maxLoanedSamples.Value));
+            }
+
+            if (_initialMaxSliceLen.HasValue)
+            {
+                Native.Iox2NativeMethods.iox2_port_factory_publisher_builder_set_initial_max_slice_len(
+                    ref publisherBuilderHandle, new UIntPtr(_initialMaxSliceLen.Value));
             }
 
             // Create publisher - pass NULL to let C allocate on heap
