@@ -91,12 +91,30 @@ static class WaitSetObservableExtensions
                 return CallbackProgression.Continue;
             }
 
-            // Run WaitSet in background task
+            // Run WaitSet in background task using polling with timeout
+            // This allows us to check cancellation token periodically
             var waitTask = Task.Run(() =>
             {
                 try
                 {
-                    var result = waitSet.WaitAndProcess(OnEvent);
+                    while (!cts.Token.IsCancellationRequested)
+                    {
+                        // Use short timeout to allow responsive cancellation
+                        var result = waitSet.WaitAndProcessOnce(OnEvent, TimeSpan.FromMilliseconds(100));
+
+                        if (result.IsErr || cts.Token.IsCancellationRequested)
+                        {
+                            break;
+                        }
+
+                        var runResult = result.Unwrap();
+                        // Check if we should stop due to signal or explicit stop request
+                        if (runResult == WaitSetRunResult.TerminationRequest ||
+                            runResult == WaitSetRunResult.Interrupt)
+                        {
+                            break;
+                        }
+                    }
                     observer.OnCompleted();
                 }
                 catch (Exception ex)
@@ -107,12 +125,13 @@ static class WaitSetObservableExtensions
 
             // Return disposable that stops the WaitSet
             return new CompositeDisposable(
-                cts,
                 Disposable.Create(() =>
                 {
-                    waitSet.Stop();
+                    // Cancel the token which will cause the callback to return Stop
+                    cts.Cancel();
                     try
                     {
+                        // Wait for the WaitSet task to complete naturally
                         waitTask.Wait(TimeSpan.FromSeconds(5));
                     }
                     catch
@@ -202,7 +221,11 @@ class Program
         };
 
         // Create Observable stream from WaitSet
-        var eventStream = waitSet.ToObservable(guards, listeners, serviceNames, cts.Token);
+        // IMPORTANT: Use Publish().RefCount() to share the single WaitSet across multiple subscribers
+        // Without this, each subscription would try to call WaitAndProcess() concurrently, causing panics
+        var eventStream = waitSet.ToObservable(guards, listeners, serviceNames, cts.Token)
+            .Publish()
+            .RefCount();
 
         // Example 1: Simple subscription - print all events
         Console.WriteLine("\n=== Simple Event Stream ===");
@@ -279,18 +302,21 @@ class Program
             Console.WriteLine("\n\nShutting down...");
         }
 
-        // Cleanup subscriptions
+        // Cleanup subscriptions first - this stops the WaitSet
         subscription1.Dispose();
         subscription3.Dispose();
         subscription4.Dispose();
         subscription6.Dispose();
 
-        // Cleanup guards
+        // Give a moment for WaitSet to fully stop
+        await Task.Delay(100);
+
+        // Dispose WaitSet BEFORE guards to ensure it's not using file descriptors
+        waitSet.Dispose();
+
+        // Now safe to dispose guards, listeners, services
         foreach (var guard in guards)
             guard.Dispose();
-
-        // Cleanup
-        waitSet.Dispose();
         foreach (var listener in listeners)
             listener.Dispose();
         foreach (var service in services)
