@@ -81,7 +81,7 @@ name and supports one of three communication patterns:
 
 | Pattern | Description | Use Case |
 |---------|-------------|----------|
-| **Publish-Subscribe** | One-to-many data distribution | Sensor data, telemetry, state broadcasts |
+| **Publish-Subscribe** | Many-to-many data distribution | Sensor data, telemetry, state broadcasts |
 | **Event** | Lightweight notifications with event IDs | Wake-up signals, state changes, triggers |
 | **Request-Response** | Client-server RPC | Commands, queries, configuration updates |
 

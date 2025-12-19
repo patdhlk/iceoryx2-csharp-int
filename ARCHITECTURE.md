@@ -66,7 +66,7 @@ iceoryx2 supports three messaging patterns:
 
 | Pattern | Endpoints | Data Flow | Use Case |
 |---------|-----------|-----------|----------|
-| **Publish-Subscribe** | Publishers → Subscribers | One-to-many | Sensor data, events |
+| **Publish-Subscribe** | Publishers → Subscribers | many-to-many | Sensor data, events |
 | **Event** | Notifiers → Listeners | One-to-many (IDs only) | Wake-up signals |
 | **Request-Response** | Clients ↔ Servers | Many-to-many | RPC, commands |
 

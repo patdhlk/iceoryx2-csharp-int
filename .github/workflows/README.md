@@ -2,7 +2,8 @@
 
 ## build.yml
 
-This workflow builds the iceoryx2-csharp project and creates NuGet packages.
+This workflow builds the iceoryx2-csharp project and creates
+NuGet packages (coming soon).
 
 ### Workflow Steps
 
