@@ -88,28 +88,28 @@ dotnet build examples/ComplexDataTypes/ComplexDataTypes.csproj
 
 ```bash
 cd examples/ComplexDataTypes
-dotnet run -- publisher transmission
+dotnet run --framework net9.0 -- publisher TransmissionData
 ```
 
 Or with other data types:
 
 ```bash
-dotnet run -- publisher sensor
-dotnet run -- publisher point
+dotnet run --framework net9.0 -- publisher SensorData
+dotnet run --framework net9.0 -- publisher PointData
 ```
 
 ### Terminal 2 - Subscriber
 
 ```bash
 cd examples/ComplexDataTypes
-dotnet run -- subscriber transmission
+dotnet run --framework net9.0 -- subscriber TransmissionData
 ```
 
 Or matching the publisher's data type:
 
 ```bash
-dotnet run -- subscriber sensor
-dotnet run -- subscriber point
+dotnet run --framework net9.0 -- subscriber SensorData
+dotnet run --framework net9.0 -- subscriber PointData
 ```
 
 ## Example Output
