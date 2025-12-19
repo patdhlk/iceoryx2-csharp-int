@@ -101,19 +101,22 @@ class Program
             .Create()
             .Expect("Failed to create WaitSet");
 
-        Console.WriteLine($"Waiting on services: '{serviceName1}' and '{serviceName2}'");
-
         // Attach listeners to WaitSet
+        Console.WriteLine("Attaching listeners to WaitSet...");
+        var guard1 = waitset.AttachNotification(listener1).Expect($"Failed to attach listener for '{serviceName1}'");
+        Console.WriteLine($"✓ Attached listener for service '{serviceName1}'");
+
+        var guard2 = waitset.AttachNotification(listener2).Expect($"Failed to attach listener for '{serviceName2}'");
+        Console.WriteLine($"✓ Attached listener for service '{serviceName2}'");
+
         using var context = new CallbackContext
         {
-            Guards = new WaitSetGuard[]
-            {
-                waitset.AttachNotification(listener1).Expect($"Failed to attach listener for '{serviceName1}'"),
-                waitset.AttachNotification(listener2).Expect($"Failed to attach listener for '{serviceName2}'")
-            },
+            Guards = new WaitSetGuard[] { guard1, guard2 },
             Listeners = new Listener[] { listener1, listener2 },
             ServiceNames = new string[] { serviceName1, serviceName2 }
         };
+
+        Console.WriteLine($"Waiting on services: '{serviceName1}' and '{serviceName2}'");
 
         // Event processing callback
         CallbackProgression OnEvent(WaitSetAttachmentId attachmentId)
@@ -204,6 +207,7 @@ class Program
             .Expect($"Failed to create notifier for '{serviceName}'");
 
         Console.WriteLine($"Sending events with ID {eventIdValue} to service '{serviceName}'");
+        Console.WriteLine("Note: If event ID is too large, you may need to configure MaxEventId on the service");
 
         // Send events periodically until interrupted
         var eventId = new EventId(eventIdValue);

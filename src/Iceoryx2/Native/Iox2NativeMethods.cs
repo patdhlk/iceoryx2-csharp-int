@@ -111,6 +111,13 @@ internal static partial class Iox2NativeMethods
         INTERRUPT = 3
     }
 
+    internal enum iox2_notifier_notify_error_e
+    {
+        EVENT_ID_OUT_OF_BOUNDS = IOX2_OK + 1,
+        MISSED_DEADLINE = IOX2_OK + 2,
+        UNABLE_TO_ACQUIRE_ELAPSED_TIME = IOX2_OK + 3
+    }
+
     // ========================================
     // Structs - Storage Types
     // ========================================

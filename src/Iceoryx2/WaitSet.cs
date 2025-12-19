@@ -107,7 +107,9 @@ public sealed class WaitSet : IDisposable
 
         // Get file descriptor from listener
         var fd = Native.Iox2NativeMethods.iox2_listener_get_file_descriptor(ref listenerHandle);
-        if (fd == IntPtr.Zero)
+        // Note: fd can be 0 (stdin), which is valid on Unix. Invalid fd is typically -1
+        // We check for negative values by casting to long (to handle 64-bit pointers)
+        if (fd.ToInt64() < 0)
             return Result<WaitSetGuard, Iox2Error>.Err(Iox2Error.WaitSetAttachmentFailed);
 
         var result = Native.Iox2NativeMethods.iox2_waitset_attach_notification(
@@ -142,7 +144,9 @@ public sealed class WaitSet : IDisposable
 
         // Get file descriptor from listener
         var fd = Native.Iox2NativeMethods.iox2_listener_get_file_descriptor(ref listenerHandle);
-        if (fd == IntPtr.Zero)
+        // Note: fd can be 0 (stdin), which is valid on Unix. Invalid fd is typically -1
+        // We check for negative values by casting to long (to handle 64-bit pointers)
+        if (fd.ToInt64() < 0)
             return Result<WaitSetGuard, Iox2Error>.Err(Iox2Error.WaitSetAttachmentFailed);
 
         var seconds = (ulong)deadline.TotalSeconds;
@@ -407,20 +411,8 @@ public sealed class WaitSet : IDisposable
             {
                 ThrowIfDisposed();
 
-                // Register cancellation to stop the WaitSet - do this AFTER we start waiting
-                using var registration = cancellationToken.Register(() =>
-                {
-                    try
-                    {
-                        Stop();
-                    }
-                    catch
-                    {
-                        // Ignore errors during Stop() - the function may not be available
-                    }
-                });
-
                 // Use the internal version that doesn't dispose attachment IDs
+                // Note: Cancellation is handled by the callback checking cancellationToken
                 var result = WaitAndProcessInternal(attachmentId =>
                 {
                     if (cancellationToken.IsCancellationRequested)

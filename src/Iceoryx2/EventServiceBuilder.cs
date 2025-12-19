@@ -22,10 +22,59 @@ namespace Iceoryx2;
 public sealed class EventServiceBuilder
 {
     private readonly Node _node;
+    private ulong? _maxEventId;
+    private ulong? _maxNotifiers;
+    private ulong? _maxListeners;
+    private ulong? _maxNodes;
 
     internal EventServiceBuilder(Node node)
     {
         _node = node ?? throw new ArgumentNullException(nameof(node));
+    }
+
+    /// <summary>
+    /// Sets the maximum event ID value that can be used with this service.
+    /// Event IDs must be less than or equal to this value.
+    /// </summary>
+    /// <param name="value">Maximum event ID value</param>
+    /// <returns>This builder for method chaining</returns>
+    public EventServiceBuilder MaxEventId(ulong value)
+    {
+        _maxEventId = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the maximum number of notifiers that can connect to this service.
+    /// </summary>
+    /// <param name="value">Maximum number of notifiers</param>
+    /// <returns>This builder for method chaining</returns>
+    public EventServiceBuilder MaxNotifiers(ulong value)
+    {
+        _maxNotifiers = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the maximum number of listeners that can connect to this service.
+    /// </summary>
+    /// <param name="value">Maximum number of listeners</param>
+    /// <returns>This builder for method chaining</returns>
+    public EventServiceBuilder MaxListeners(ulong value)
+    {
+        _maxListeners = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the maximum number of nodes that can access this service.
+    /// </summary>
+    /// <param name="value">Maximum number of nodes</param>
+    /// <returns>This builder for method chaining</returns>
+    public EventServiceBuilder MaxNodes(ulong value)
+    {
+        _maxNodes = value;
+        return this;
     }
 
     /// <summary>
@@ -73,6 +122,31 @@ public sealed class EventServiceBuilder
 
             if (eventBuilderHandle == IntPtr.Zero)
                 return Result<EventService, Iox2Error>.Err(Iox2Error.EventServiceCreationFailed);
+
+            // Apply configuration settings if specified
+            if (_maxEventId.HasValue)
+            {
+                Native.Iox2NativeMethods.iox2_service_builder_event_set_event_id_max_value(
+                    ref eventBuilderHandle, new UIntPtr(_maxEventId.Value));
+            }
+
+            if (_maxNotifiers.HasValue)
+            {
+                Native.Iox2NativeMethods.iox2_service_builder_event_set_max_notifiers(
+                    ref eventBuilderHandle, new UIntPtr(_maxNotifiers.Value));
+            }
+
+            if (_maxListeners.HasValue)
+            {
+                Native.Iox2NativeMethods.iox2_service_builder_event_set_max_listeners(
+                    ref eventBuilderHandle, new UIntPtr(_maxListeners.Value));
+            }
+
+            if (_maxNodes.HasValue)
+            {
+                Native.Iox2NativeMethods.iox2_service_builder_event_set_max_nodes(
+                    ref eventBuilderHandle, new UIntPtr(_maxNodes.Value));
+            }
 
             // Open or create the event service - pass NULL to let C allocate on heap
             var openResult = Native.Iox2NativeMethods.iox2_service_builder_event_open_or_create(
@@ -143,6 +217,31 @@ public sealed class EventServiceBuilder
 
             if (eventBuilderHandle == IntPtr.Zero)
                 return Result<EventService, Iox2Error>.Err(Iox2Error.EventServiceCreationFailed);
+
+            // Apply configuration settings if specified
+            if (_maxEventId.HasValue)
+            {
+                Native.Iox2NativeMethods.iox2_service_builder_event_set_event_id_max_value(
+                    ref eventBuilderHandle, new UIntPtr(_maxEventId.Value));
+            }
+
+            if (_maxNotifiers.HasValue)
+            {
+                Native.Iox2NativeMethods.iox2_service_builder_event_set_max_notifiers(
+                    ref eventBuilderHandle, new UIntPtr(_maxNotifiers.Value));
+            }
+
+            if (_maxListeners.HasValue)
+            {
+                Native.Iox2NativeMethods.iox2_service_builder_event_set_max_listeners(
+                    ref eventBuilderHandle, new UIntPtr(_maxListeners.Value));
+            }
+
+            if (_maxNodes.HasValue)
+            {
+                Native.Iox2NativeMethods.iox2_service_builder_event_set_max_nodes(
+                    ref eventBuilderHandle, new UIntPtr(_maxNodes.Value));
+            }
 
             // Create the event service
             var createResult = Native.Iox2NativeMethods.iox2_service_builder_event_create(

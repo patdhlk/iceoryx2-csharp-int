@@ -80,13 +80,26 @@ public sealed class Notifier : IDisposable
                 IntPtr.Zero);  // Pass NULL for listener count
 
             if (result != Native.Iox2NativeMethods.IOX2_OK)
-                return Result<Unit, Iox2Error>.Err(Iox2Error.NotifyFailed);
+            {
+                var error = (Native.Iox2NativeMethods.iox2_notifier_notify_error_e)result;
+                var details = error switch
+                {
+                    Native.Iox2NativeMethods.iox2_notifier_notify_error_e.EVENT_ID_OUT_OF_BOUNDS =>
+                        $"Event ID {eventId.Value} exceeds maximum allowed value",
+                    Native.Iox2NativeMethods.iox2_notifier_notify_error_e.MISSED_DEADLINE =>
+                        "Missed deadline while trying to notify",
+                    Native.Iox2NativeMethods.iox2_notifier_notify_error_e.UNABLE_TO_ACQUIRE_ELAPSED_TIME =>
+                        "Unable to acquire elapsed time",
+                    _ => $"Unknown error code: {result}"
+                };
+                return Result<Unit, Iox2Error>.Err(new ErrorHandling.NotifyError(eventId, details));
+            }
 
             return Result<Unit, Iox2Error>.Ok(Unit.Value);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return Result<Unit, Iox2Error>.Err(Iox2Error.NotifyFailed);
+            return Result<Unit, Iox2Error>.Err(new ErrorHandling.NotifyError(eventId, ex.Message));
         }
     }
 
