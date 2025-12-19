@@ -78,7 +78,7 @@ public struct InvalidData
 ## How to Build
 
 ```bash
-cd /path/to/iceoryx2/iceoryx2-ffi/csharp
+cd /path/to/iceoryx2-csharp
 dotnet build examples/ComplexDataTypes/ComplexDataTypes.csproj
 ```
 
