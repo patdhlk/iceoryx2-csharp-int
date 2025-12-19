@@ -30,8 +30,8 @@ Notifier → [Event Service] → Listener → WaitSet → Observable → Rx Oper
 ## Building
 
 ```bash
-cd /Users/patdhlk/src/patdhlk/iceoryx2/iceoryx2-ffi/csharp
-dotnet build examples/ReactiveEventExample/ReactiveEventExample.csproj
+cd iceoryx2-csharp/examples/ReactiveEventExample
+dotnet build
 ```
 
 ## Running
