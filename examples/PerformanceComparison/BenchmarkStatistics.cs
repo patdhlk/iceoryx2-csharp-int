@@ -27,6 +27,10 @@ public sealed class BenchmarkStatistics
     private long _messageCount;
     private readonly Stopwatch _stopwatch = new();
 
+    // CPU time tracking
+    private TimeSpan _cpuTimeStart;
+    private TimeSpan _cpuTimeEnd;
+
     /// <summary>
     /// Gets or sets the name of this benchmark run.
     /// </summary>
@@ -38,14 +42,22 @@ public sealed class BenchmarkStatistics
     public PayloadSize PayloadSize { get; set; }
 
     /// <summary>
-    /// Starts the benchmark timer.
+    /// Starts the benchmark timer and captures initial CPU time.
     /// </summary>
-    public void Start() => _stopwatch.Start();
+    public void Start()
+    {
+        _cpuTimeStart = Process.GetCurrentProcess().TotalProcessorTime;
+        _stopwatch.Start();
+    }
 
     /// <summary>
-    /// Stops the benchmark timer.
+    /// Stops the benchmark timer and captures final CPU time.
     /// </summary>
-    public void Stop() => _stopwatch.Stop();
+    public void Stop()
+    {
+        _stopwatch.Stop();
+        _cpuTimeEnd = Process.GetCurrentProcess().TotalProcessorTime;
+    }
 
     /// <summary>
     /// Records a message for throughput calculation.
@@ -90,9 +102,43 @@ public sealed class BenchmarkStatistics
                 PayloadSize.Small => 8,
                 PayloadSize.Medium => 1024,
                 PayloadSize.Large => 65536,
+                PayloadSize.ExtraLarge => 524288,
                 _ => 8
             };
             return (MessageCount * payloadBytes) / (Elapsed.TotalSeconds * 1024 * 1024);
+        }
+    }
+
+    /// <summary>
+    /// Gets the total CPU time used (user + kernel) during the benchmark.
+    /// </summary>
+    public TimeSpan CpuTime => _cpuTimeEnd - _cpuTimeStart;
+
+    /// <summary>
+    /// Gets the CPU utilization percentage.
+    /// Can exceed 100% on multi-core systems when multiple threads are utilized.
+    /// </summary>
+    public double CpuUtilizationPercent
+    {
+        get
+        {
+            if (Elapsed.TotalSeconds <= 0)
+                return 0;
+            return (CpuTime.TotalSeconds / Elapsed.TotalSeconds) * 100;
+        }
+    }
+
+    /// <summary>
+    /// Gets the efficiency metric: messages processed per CPU-second.
+    /// Higher values indicate more efficient CPU usage.
+    /// </summary>
+    public double MessagesPerCpuSecond
+    {
+        get
+        {
+            if (CpuTime.TotalSeconds <= 0)
+                return 0;
+            return MessageCount / CpuTime.TotalSeconds;
         }
     }
 
@@ -230,10 +276,13 @@ public static class BenchmarkReporter
         Console.WriteLine();
         Console.WriteLine($"  {stats.Name}");
         Console.WriteLine($"  {"".PadRight(50, '-')}");
-        Console.WriteLine($"  Messages sent:     {stats.MessageCount:N0}");
+        Console.WriteLine($"  Messages received: {stats.MessageCount:N0}");
         Console.WriteLine($"  Duration:          {stats.Elapsed.TotalSeconds:F2} seconds");
         Console.WriteLine($"  Throughput:        {stats.MessagesPerSecond:N0} msg/sec");
         Console.WriteLine($"  Data rate:         {stats.MegabytesPerSecond:F2} MB/sec");
+        Console.WriteLine($"  CPU time:          {stats.CpuTime.TotalSeconds:F2} seconds");
+        Console.WriteLine($"  CPU utilization:   {stats.CpuUtilizationPercent:F1}% (multi-core)");
+        Console.WriteLine($"  Efficiency:        {stats.MessagesPerCpuSecond:N0} msg/CPU-sec");
     }
 
     /// <summary>
@@ -274,6 +323,17 @@ public static class BenchmarkReporter
             Console.WriteLine($"  Throughput ratio:  {throughputRatio:F2}x ({indicator})");
             Console.WriteLine($"    {baseline.Name}: {baseline.MessagesPerSecond:N0} msg/sec");
             Console.WriteLine($"    {comparison.Name}: {comparison.MessagesPerSecond:N0} msg/sec");
+        }
+
+        // CPU efficiency comparison (higher is better)
+        if (baseline.MessagesPerCpuSecond > 0 && comparison.MessagesPerCpuSecond > 0)
+        {
+            var efficiencyRatio = comparison.MessagesPerCpuSecond / baseline.MessagesPerCpuSecond;
+            var indicator = efficiencyRatio > 1 ? "more efficient" : "less efficient";
+            Console.WriteLine();
+            Console.WriteLine($"  Efficiency ratio:  {efficiencyRatio:F2}x ({indicator})");
+            Console.WriteLine($"    {baseline.Name}: {baseline.MessagesPerCpuSecond:N0} msg/CPU-sec");
+            Console.WriteLine($"    {comparison.Name}: {comparison.MessagesPerCpuSecond:N0} msg/CPU-sec");
         }
 
         // Latency comparison (lower is better)
@@ -320,6 +380,7 @@ public static class BenchmarkReporter
         PayloadSize.Small => 8,
         PayloadSize.Medium => 1024,
         PayloadSize.Large => 65536,
+        PayloadSize.ExtraLarge => 524288,
         _ => 8
     };
 }

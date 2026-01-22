@@ -60,6 +60,16 @@ public sealed class BenchmarkConfig
     public bool RunAllPayloadSizes { get; set; }
 
     /// <summary>
+    /// Whether to generate a markdown report after benchmarking.
+    /// </summary>
+    public bool GenerateReport { get; set; }
+
+    /// <summary>
+    /// Path to save the generated report. Defaults to BENCHMARK_REPORT.md in the current directory.
+    /// </summary>
+    public string ReportPath { get; set; } = "BENCHMARK_REPORT.md";
+
+    /// <summary>
     /// Parses command line arguments into a BenchmarkConfig.
     /// </summary>
     public static BenchmarkConfig Parse(string[] args)
@@ -104,7 +114,9 @@ public sealed class BenchmarkConfig
                         {
                             "channels" or "c" => BenchmarkTarget.Channels,
                             "iceoryx2" or "i" or "iox2" => BenchmarkTarget.Iceoryx2,
+                            "pipes" or "p" => BenchmarkTarget.Pipes,
                             "both" or "b" => BenchmarkTarget.Both,
+                            "all" or "a" => BenchmarkTarget.All,
                             _ => BenchmarkTarget.Both
                         };
                     }
@@ -142,6 +154,18 @@ public sealed class BenchmarkConfig
                     config.RunAllPayloadSizes = true;
                     break;
 
+                case "--report" or "-r":
+                    config.GenerateReport = true;
+                    break;
+
+                case "--report-path":
+                    if (i + 1 < args.Length)
+                    {
+                        config.ReportPath = args[++i];
+                        config.GenerateReport = true;
+                    }
+                    break;
+
                 case "--help" or "-h":
                     PrintHelp();
                     Environment.Exit(0);
@@ -161,7 +185,7 @@ public sealed class BenchmarkConfig
         Console.WriteLine("iceoryx2 C# Performance Comparison Benchmark");
         Console.WriteLine("=============================================");
         Console.WriteLine();
-        Console.WriteLine("Compares performance between .NET System.Threading.Channels and iceoryx2 IPC.");
+        Console.WriteLine("Compares performance between .NET System.Threading.Channels, System.IO.Pipes, and iceoryx2 IPC.");
         Console.WriteLine();
         Console.WriteLine("USAGE:");
         Console.WriteLine("  dotnet run -- [OPTIONS]");
@@ -173,7 +197,8 @@ public sealed class BenchmarkConfig
         Console.WriteLine("  -p, --payload <SIZE>     Payload size: small (s, 8B), medium (m, 1KB), large (l, 64KB)");
         Console.WriteLine("                           Default: small");
         Console.WriteLine();
-        Console.WriteLine("  -t, --target <TARGET>    Target: channels (c), iceoryx2 (i), or both (b)");
+        Console.WriteLine("  -t, --target <TARGET>    Target: channels (c), iceoryx2 (i), pipes (p),");
+        Console.WriteLine("                           both (b), or all (a). 'both' = channels+iceoryx2.");
         Console.WriteLine("                           Default: both");
         Console.WriteLine();
         Console.WriteLine("  -d, --duration <SECS>    Benchmark duration in seconds (for throughput)");
@@ -190,12 +215,19 @@ public sealed class BenchmarkConfig
         Console.WriteLine();
         Console.WriteLine("  -a, --all-payloads       Run benchmarks for all payload sizes");
         Console.WriteLine();
+        Console.WriteLine("  -r, --report             Generate a markdown report after benchmarking");
+        Console.WriteLine();
+        Console.WriteLine("  --report-path <PATH>     Path to save the report (implies --report)");
+        Console.WriteLine("                           Default: BENCHMARK_REPORT.md");
+        Console.WriteLine();
         Console.WriteLine("  -h, --help               Show this help message");
         Console.WriteLine();
         Console.WriteLine("EXAMPLES:");
         Console.WriteLine("  dotnet run -- --mode throughput --payload small --target both");
         Console.WriteLine("  dotnet run -- -m latency -p medium -t iceoryx2");
         Console.WriteLine("  dotnet run -- --all-payloads --mode throughput");
+        Console.WriteLine("  dotnet run -- -t all -a                         # All targets, all payloads");
+        Console.WriteLine("  dotnet run -- -t pipes -p large                 # Named pipes with 64KB payload");
         Console.WriteLine();
     }
 }

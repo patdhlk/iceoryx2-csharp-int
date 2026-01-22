@@ -12,13 +12,17 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace PerformanceComparison;
 
 /// <summary>
-/// Performance comparison benchmark between .NET System.Threading.Channels and iceoryx2 C# IPC.
+/// Performance comparison benchmark between .NET System.Threading.Channels, System.IO.Pipes, and iceoryx2 C# IPC.
+/// - Channels: In-process producer/consumer (not IPC)
+/// - Pipes: Named pipes for true IPC
+/// - iceoryx2: Zero-copy shared memory IPC
 /// </summary>
 class Program
 {
@@ -69,9 +73,10 @@ class Program
 
     private static async Task RunAllPayloadSizes(BenchmarkConfig config)
     {
-        var payloadSizes = new[] { PayloadSize.Small, PayloadSize.Medium, PayloadSize.Large };
+        var payloadSizes = new[] { PayloadSize.Small, PayloadSize.Medium, PayloadSize.Large, PayloadSize.ExtraLarge };
         var channelsResults = new List<BenchmarkStatistics>();
         var iceoryx2Results = new List<BenchmarkStatistics>();
+        var pipesResults = new List<BenchmarkStatistics>();
 
         foreach (var payloadSize in payloadSizes)
         {
@@ -82,24 +87,33 @@ class Program
                 PayloadSize.Small => "Small (8 bytes)",
                 PayloadSize.Medium => "Medium (1 KB)",
                 PayloadSize.Large => "Large (64 KB)",
+                PayloadSize.ExtraLarge => "Extra Large (512 KB)",
                 _ => payloadSize.ToString()
             };
 
             BenchmarkReporter.PrintHeader($"{config.Mode} Benchmark - {sizeLabel}");
 
-            var (channelStats, iox2Stats) = await RunSingleBenchmark(config);
+            var (channelStats, iox2Stats, pipesStats) = await RunSingleBenchmark(config);
 
             if (channelStats != null)
                 channelsResults.Add(channelStats);
             if (iox2Stats != null)
                 iceoryx2Results.Add(iox2Stats);
+            if (pipesStats != null)
+                pipesResults.Add(pipesStats);
 
             // Force GC between benchmarks
             ForceGarbageCollection();
         }
 
         // Print summary
-        PrintSummary(config.Mode, channelsResults, iceoryx2Results);
+        PrintSummary(config.Mode, config.Target, channelsResults, iceoryx2Results, pipesResults);
+
+        // Generate report if requested
+        if (config.GenerateReport)
+        {
+            GenerateAndSaveReport(config, channelsResults, pipesResults, iceoryx2Results);
+        }
     }
 
     private static async Task RunBenchmark(BenchmarkConfig config)
@@ -109,28 +123,48 @@ class Program
             PayloadSize.Small => "Small (8 bytes)",
             PayloadSize.Medium => "Medium (1 KB)",
             PayloadSize.Large => "Large (64 KB)",
+            PayloadSize.ExtraLarge => "Extra Large (512 KB)",
             _ => config.PayloadSize.ToString()
         };
 
         BenchmarkReporter.PrintHeader($"{config.Mode} Benchmark - {sizeLabel}");
 
-        var (channelStats, iox2Stats) = await RunSingleBenchmark(config);
+        var (channelStats, iox2Stats, pipesStats) = await RunSingleBenchmark(config);
 
-        // Print comparison if both were run
+        // Print comparisons
         if (channelStats != null && iox2Stats != null)
         {
             BenchmarkReporter.PrintComparison(channelStats, iox2Stats);
         }
+        if (pipesStats != null && iox2Stats != null)
+        {
+            BenchmarkReporter.PrintComparison(pipesStats, iox2Stats);
+        }
+        if (channelStats != null && pipesStats != null)
+        {
+            BenchmarkReporter.PrintComparison(channelStats, pipesStats);
+        }
+
+        // Generate report if requested
+        if (config.GenerateReport)
+        {
+            var channelsResults = channelStats != null ? new List<BenchmarkStatistics> { channelStats } : new List<BenchmarkStatistics>();
+            var pipesResults = pipesStats != null ? new List<BenchmarkStatistics> { pipesStats } : new List<BenchmarkStatistics>();
+            var iceoryx2Results = iox2Stats != null ? new List<BenchmarkStatistics> { iox2Stats } : new List<BenchmarkStatistics>();
+
+            GenerateAndSaveReport(config, channelsResults, pipesResults, iceoryx2Results);
+        }
     }
 
-    private static async Task<(BenchmarkStatistics? channels, BenchmarkStatistics? iceoryx2)>
+    private static async Task<(BenchmarkStatistics? channels, BenchmarkStatistics? iceoryx2, BenchmarkStatistics? pipes)>
         RunSingleBenchmark(BenchmarkConfig config)
     {
         BenchmarkStatistics? channelStats = null;
         BenchmarkStatistics? iox2Stats = null;
+        BenchmarkStatistics? pipesStats = null;
 
         // Run .NET Channels benchmark
-        if (config.Target is BenchmarkTarget.Channels or BenchmarkTarget.Both)
+        if (config.Target is BenchmarkTarget.Channels or BenchmarkTarget.Both or BenchmarkTarget.All)
         {
             Console.WriteLine();
             Console.WriteLine("  Running .NET Channels benchmark...");
@@ -149,8 +183,35 @@ class Program
             ForceGarbageCollection();
         }
 
+        // Run Named Pipes benchmark
+        if (config.Target is BenchmarkTarget.Pipes or BenchmarkTarget.All)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  Running Named Pipes benchmark...");
+            var pipesBenchmark = new PipesBenchmark(config);
+
+            try
+            {
+                pipesStats = config.Mode == BenchmarkMode.Throughput
+                    ? await pipesBenchmark.RunThroughputAsync(config.PayloadSize)
+                    : await pipesBenchmark.RunLatencyAsync(config.PayloadSize);
+
+                if (config.Mode == BenchmarkMode.Throughput)
+                    BenchmarkReporter.PrintThroughputResults(pipesStats);
+                else
+                    BenchmarkReporter.PrintLatencyResults(pipesStats);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"    ERROR: Named Pipes benchmark failed: {ex.Message}");
+            }
+
+            // Force GC between benchmarks
+            ForceGarbageCollection();
+        }
+
         // Run iceoryx2 benchmark
-        if (config.Target is BenchmarkTarget.Iceoryx2 or BenchmarkTarget.Both)
+        if (config.Target is BenchmarkTarget.Iceoryx2 or BenchmarkTarget.Both or BenchmarkTarget.All)
         {
             Console.WriteLine();
             Console.WriteLine("  Running iceoryx2 benchmark...");
@@ -174,91 +235,222 @@ class Program
             }
         }
 
-        return (channelStats, iox2Stats);
+        return (channelStats, iox2Stats, pipesStats);
     }
 
     private static void PrintSummary(
         BenchmarkMode mode,
+        BenchmarkTarget target,
         List<BenchmarkStatistics> channelsResults,
-        List<BenchmarkStatistics> iceoryx2Results)
+        List<BenchmarkStatistics> iceoryx2Results,
+        List<BenchmarkStatistics> pipesResults)
     {
         BenchmarkReporter.PrintHeader("BENCHMARK SUMMARY");
 
         Console.WriteLine();
         Console.WriteLine("  Results by Payload Size:");
-        Console.WriteLine($"  {"".PadRight(70, '-')}");
+
+        var includeChannels = target is BenchmarkTarget.Channels or BenchmarkTarget.Both or BenchmarkTarget.All;
+        var includePipes = target is BenchmarkTarget.Pipes or BenchmarkTarget.All;
+        var includeIox2 = target is BenchmarkTarget.Iceoryx2 or BenchmarkTarget.Both or BenchmarkTarget.All;
+
+        var maxResults = Math.Max(
+            Math.Max(channelsResults.Count, iceoryx2Results.Count),
+            pipesResults.Count);
 
         if (mode == BenchmarkMode.Throughput)
         {
-            Console.WriteLine($"  {"Payload",-12} {"Channels (msg/s)",-20} {"iceoryx2 (msg/s)",-20} {"Ratio",-10}");
-            Console.WriteLine($"  {"".PadRight(70, '-')}");
+            PrintThroughputSummary(includeChannels, includePipes, includeIox2, maxResults,
+                channelsResults, pipesResults, iceoryx2Results);
 
-            for (var i = 0; i < Math.Max(channelsResults.Count, iceoryx2Results.Count); i++)
-            {
-                var channelStats = i < channelsResults.Count ? channelsResults[i] : null;
-                var iox2Stats = i < iceoryx2Results.Count ? iceoryx2Results[i] : null;
-
-                var payloadSize = channelStats?.PayloadSize ?? iox2Stats?.PayloadSize ?? PayloadSize.Small;
-                var payloadLabel = payloadSize switch
-                {
-                    PayloadSize.Small => "Small (8B)",
-                    PayloadSize.Medium => "Medium (1KB)",
-                    PayloadSize.Large => "Large (64KB)",
-                    _ => payloadSize.ToString()
-                };
-
-                var channelThroughput = channelStats?.MessagesPerSecond ?? 0;
-                var iox2Throughput = iox2Stats?.MessagesPerSecond ?? 0;
-                var ratio = channelThroughput > 0 && iox2Throughput > 0
-                    ? iox2Throughput / channelThroughput
-                    : 0;
-
-                var ratioStr = ratio > 0 ? $"{ratio:F2}x" : "N/A";
-
-                Console.WriteLine($"  {payloadLabel,-12} {channelThroughput,18:N0} {iox2Throughput,18:N0} {ratioStr,10}");
-            }
+            PrintEfficiencySummary(includeChannels, includePipes, includeIox2, maxResults,
+                channelsResults, pipesResults, iceoryx2Results);
         }
         else
         {
-            Console.WriteLine($"  {"Payload",-12} {"Channels P50 (us)",-18} {"iceoryx2 P50 (us)",-18} {"Ratio",-10}");
-            Console.WriteLine($"  {"".PadRight(70, '-')}");
-
-            for (var i = 0; i < Math.Max(channelsResults.Count, iceoryx2Results.Count); i++)
-            {
-                var channelStats = i < channelsResults.Count ? channelsResults[i] : null;
-                var iox2Stats = i < iceoryx2Results.Count ? iceoryx2Results[i] : null;
-
-                var payloadSize = channelStats?.PayloadSize ?? iox2Stats?.PayloadSize ?? PayloadSize.Small;
-                var payloadLabel = payloadSize switch
-                {
-                    PayloadSize.Small => "Small (8B)",
-                    PayloadSize.Medium => "Medium (1KB)",
-                    PayloadSize.Large => "Large (64KB)",
-                    _ => payloadSize.ToString()
-                };
-
-                var channelLatency = channelStats?.P50LatencyMicroseconds ?? 0;
-                var iox2Latency = iox2Stats?.P50LatencyMicroseconds ?? 0;
-                var ratio = channelLatency > 0 && iox2Latency > 0
-                    ? channelLatency / iox2Latency
-                    : 0;
-
-                var ratioStr = ratio > 0 ? $"{ratio:F2}x" : "N/A";
-
-                Console.WriteLine($"  {payloadLabel,-12} {channelLatency,16:F2} {iox2Latency,16:F2} {ratioStr,10}");
-            }
+            PrintLatencySummary(includeChannels, includePipes, includeIox2, maxResults,
+                channelsResults, pipesResults, iceoryx2Results);
         }
 
-        Console.WriteLine($"  {"".PadRight(70, '-')}");
         Console.WriteLine();
-        Console.WriteLine("  Note: Ratio > 1.0 means iceoryx2 is faster (for throughput) or");
-        Console.WriteLine("        has lower latency (for latency tests).");
+        Console.WriteLine("  Note: Ratio > 1.0 means iceoryx2 is faster (for throughput),");
+        Console.WriteLine("        more CPU efficient (for efficiency), or has lower latency.");
+        Console.WriteLine("        Channels is in-process only. Pipes and iceoryx2 are true IPC.");
     }
+
+    private static void PrintThroughputSummary(
+        bool includeChannels, bool includePipes, bool includeIox2, int maxResults,
+        List<BenchmarkStatistics> channelsResults,
+        List<BenchmarkStatistics> pipesResults,
+        List<BenchmarkStatistics> iceoryx2Results)
+    {
+        // Build header based on what's included
+        var header = $"  {"Payload",-12}";
+        if (includeChannels) header += $" {"Channels",-14}";
+        if (includePipes) header += $" {"Pipes",-14}";
+        if (includeIox2) header += $" {"iceoryx2",-14}";
+        if (includePipes && includeIox2) header += $" {"iox2/Pipes",-10}";
+
+        var lineWidth = header.Length;
+        Console.WriteLine($"  {"".PadRight(lineWidth - 2, '-')}");
+        Console.WriteLine(header);
+        Console.WriteLine($"  {"".PadRight(lineWidth - 2, '-')}");
+
+        for (var i = 0; i < maxResults; i++)
+        {
+            var channelStats = i < channelsResults.Count ? channelsResults[i] : null;
+            var pipesStats = i < pipesResults.Count ? pipesResults[i] : null;
+            var iox2Stats = i < iceoryx2Results.Count ? iceoryx2Results[i] : null;
+
+            var payloadSize = channelStats?.PayloadSize ?? pipesStats?.PayloadSize ?? iox2Stats?.PayloadSize ?? PayloadSize.Small;
+            var payloadLabel = GetPayloadLabel(payloadSize);
+
+            var line = $"  {payloadLabel,-12}";
+            if (includeChannels) line += $" {FormatThroughput(channelStats?.MessagesPerSecond ?? 0),14}";
+            if (includePipes) line += $" {FormatThroughput(pipesStats?.MessagesPerSecond ?? 0),14}";
+            if (includeIox2) line += $" {FormatThroughput(iox2Stats?.MessagesPerSecond ?? 0),14}";
+
+            if (includePipes && includeIox2)
+            {
+                var pipesT = pipesStats?.MessagesPerSecond ?? 0;
+                var iox2T = iox2Stats?.MessagesPerSecond ?? 0;
+                var ratio = pipesT > 0 && iox2T > 0 ? iox2T / pipesT : 0;
+                line += $" {(ratio > 0 ? $"{ratio:F1}x" : "N/A"),10}";
+            }
+
+            Console.WriteLine(line);
+        }
+        Console.WriteLine($"  {"".PadRight(lineWidth - 2, '-')}");
+    }
+
+    private static void PrintEfficiencySummary(
+        bool includeChannels, bool includePipes, bool includeIox2, int maxResults,
+        List<BenchmarkStatistics> channelsResults,
+        List<BenchmarkStatistics> pipesResults,
+        List<BenchmarkStatistics> iceoryx2Results)
+    {
+        Console.WriteLine();
+        Console.WriteLine("  CPU Efficiency (messages per CPU-second):");
+
+        var header = $"  {"Payload",-12}";
+        if (includeChannels) header += $" {"Channels",-14}";
+        if (includePipes) header += $" {"Pipes",-14}";
+        if (includeIox2) header += $" {"iceoryx2",-14}";
+        if (includePipes && includeIox2) header += $" {"iox2/Pipes",-10}";
+
+        var lineWidth = header.Length;
+        Console.WriteLine($"  {"".PadRight(lineWidth - 2, '-')}");
+        Console.WriteLine(header);
+        Console.WriteLine($"  {"".PadRight(lineWidth - 2, '-')}");
+
+        for (var i = 0; i < maxResults; i++)
+        {
+            var channelStats = i < channelsResults.Count ? channelsResults[i] : null;
+            var pipesStats = i < pipesResults.Count ? pipesResults[i] : null;
+            var iox2Stats = i < iceoryx2Results.Count ? iceoryx2Results[i] : null;
+
+            var payloadSize = channelStats?.PayloadSize ?? pipesStats?.PayloadSize ?? iox2Stats?.PayloadSize ?? PayloadSize.Small;
+            var payloadLabel = GetPayloadLabel(payloadSize);
+
+            var line = $"  {payloadLabel,-12}";
+            if (includeChannels) line += $" {FormatThroughput(channelStats?.MessagesPerCpuSecond ?? 0),14}";
+            if (includePipes) line += $" {FormatThroughput(pipesStats?.MessagesPerCpuSecond ?? 0),14}";
+            if (includeIox2) line += $" {FormatThroughput(iox2Stats?.MessagesPerCpuSecond ?? 0),14}";
+
+            if (includePipes && includeIox2)
+            {
+                var pipesE = pipesStats?.MessagesPerCpuSecond ?? 0;
+                var iox2E = iox2Stats?.MessagesPerCpuSecond ?? 0;
+                var ratio = pipesE > 0 && iox2E > 0 ? iox2E / pipesE : 0;
+                line += $" {(ratio > 0 ? $"{ratio:F1}x" : "N/A"),10}";
+            }
+
+            Console.WriteLine(line);
+        }
+        Console.WriteLine($"  {"".PadRight(lineWidth - 2, '-')}");
+    }
+
+    private static void PrintLatencySummary(
+        bool includeChannels, bool includePipes, bool includeIox2, int maxResults,
+        List<BenchmarkStatistics> channelsResults,
+        List<BenchmarkStatistics> pipesResults,
+        List<BenchmarkStatistics> iceoryx2Results)
+    {
+        var header = $"  {"Payload",-12}";
+        if (includeChannels) header += $" {"Channels P50",-14}";
+        if (includePipes) header += $" {"Pipes P50",-14}";
+        if (includeIox2) header += $" {"iceoryx2 P50",-14}";
+        if (includePipes && includeIox2) header += $" {"Pipes/iox2",-10}";
+
+        var lineWidth = header.Length;
+        Console.WriteLine($"  {"".PadRight(lineWidth - 2, '-')}");
+        Console.WriteLine(header);
+        Console.WriteLine($"  {"".PadRight(lineWidth - 2, '-')}");
+
+        for (var i = 0; i < maxResults; i++)
+        {
+            var channelStats = i < channelsResults.Count ? channelsResults[i] : null;
+            var pipesStats = i < pipesResults.Count ? pipesResults[i] : null;
+            var iox2Stats = i < iceoryx2Results.Count ? iceoryx2Results[i] : null;
+
+            var payloadSize = channelStats?.PayloadSize ?? pipesStats?.PayloadSize ?? iox2Stats?.PayloadSize ?? PayloadSize.Small;
+            var payloadLabel = GetPayloadLabel(payloadSize);
+
+            var line = $"  {payloadLabel,-12}";
+            if (includeChannels) line += $" {FormatLatency(channelStats?.P50LatencyMicroseconds ?? 0),14}";
+            if (includePipes) line += $" {FormatLatency(pipesStats?.P50LatencyMicroseconds ?? 0),14}";
+            if (includeIox2) line += $" {FormatLatency(iox2Stats?.P50LatencyMicroseconds ?? 0),14}";
+
+            if (includePipes && includeIox2)
+            {
+                var pipesL = pipesStats?.P50LatencyMicroseconds ?? 0;
+                var iox2L = iox2Stats?.P50LatencyMicroseconds ?? 0;
+                var ratio = pipesL > 0 && iox2L > 0 ? pipesL / iox2L : 0;
+                line += $" {(ratio > 0 ? $"{ratio:F1}x" : "N/A"),10}";
+            }
+
+            Console.WriteLine(line);
+        }
+        Console.WriteLine($"  {"".PadRight(lineWidth - 2, '-')}");
+    }
+
+    private static string GetPayloadLabel(PayloadSize size) => size switch
+    {
+        PayloadSize.Small => "Small (8B)",
+        PayloadSize.Medium => "Medium (1KB)",
+        PayloadSize.Large => "Large (64KB)",
+        PayloadSize.ExtraLarge => "XL (512KB)",
+        _ => size.ToString()
+    };
+
+    private static string FormatThroughput(double value) =>
+        value > 0 ? $"{value:N0}" : "N/A";
+
+    private static string FormatLatency(double value) =>
+        value > 0 ? $"{value:F2} us" : "N/A";
 
     private static void ForceGarbageCollection()
     {
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
+    }
+
+    private static void GenerateAndSaveReport(
+        BenchmarkConfig config,
+        List<BenchmarkStatistics> channelsResults,
+        List<BenchmarkStatistics> pipesResults,
+        List<BenchmarkStatistics> iceoryx2Results)
+    {
+        Console.WriteLine();
+        Console.WriteLine("  Generating benchmark report...");
+
+        var generator = new ReportGenerator();
+        var report = generator.Generate(config, channelsResults, pipesResults, iceoryx2Results);
+
+        var reportPath = Path.GetFullPath(config.ReportPath);
+        File.WriteAllText(reportPath, report);
+
+        Console.WriteLine($"  Report saved to: {reportPath}");
     }
 }

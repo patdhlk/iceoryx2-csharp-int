@@ -41,6 +41,7 @@ public sealed class ChannelsBenchmark
             PayloadSize.Small => 8,
             PayloadSize.Medium => 1024,
             PayloadSize.Large => 65536,
+            PayloadSize.ExtraLarge => 524288,
             _ => 8
         };
 
@@ -55,9 +56,10 @@ public sealed class ChannelsBenchmark
             PayloadSize = payloadSize
         };
 
+        // Use DropOldest to match iceoryx2's EnableSafeOverflow(true) behavior
         var options = new BoundedChannelOptions(_config.ChannelCapacity)
         {
-            FullMode = BoundedChannelFullMode.Wait,
+            FullMode = BoundedChannelFullMode.DropOldest,
             SingleReader = true,
             SingleWriter = true
         };
@@ -70,32 +72,42 @@ public sealed class ChannelsBenchmark
         // Pre-allocate a reusable payload
         var payload = new byte[payloadBytes];
 
-        // Producer task
-        var producerTask = Task.Run(async () =>
+        // Producer task - uses synchronous TryWrite to match iceoryx2 pattern
+        var producerTask = Task.Run(() =>
         {
             var writer = channel.Writer;
 
             while (!benchmarkComplete)
             {
-                await writer.WriteAsync(payload, cts.Token);
-
-                if (warmupComplete)
+                // TryWrite with spin-wait on failure, matching iceoryx2 pattern
+                if (!writer.TryWrite(payload))
                 {
-                    stats.RecordMessage();
+                    Thread.SpinWait(1);
                 }
             }
 
             writer.Complete();
         }, cts.Token);
 
-        // Consumer task
-        var consumerTask = Task.Run(async () =>
+        // Consumer task - counts received messages for real end-to-end throughput
+        var consumerTask = Task.Run(() =>
         {
             var reader = channel.Reader;
 
-            await foreach (var _ in reader.ReadAllAsync(cts.Token))
+            while (!benchmarkComplete || reader.TryPeek(out _))
             {
-                // Just consume
+                if (reader.TryRead(out _))
+                {
+                    // Count received messages (not sent) for real throughput
+                    if (warmupComplete)
+                    {
+                        stats.RecordMessage();
+                    }
+                }
+                else
+                {
+                    Thread.SpinWait(1);
+                }
             }
         }, cts.Token);
 
@@ -135,6 +147,7 @@ public sealed class ChannelsBenchmark
             PayloadSize.Small => 8,
             PayloadSize.Medium => 1024,
             PayloadSize.Large => 65536,
+            PayloadSize.ExtraLarge => 524288,
             _ => 8
         };
 

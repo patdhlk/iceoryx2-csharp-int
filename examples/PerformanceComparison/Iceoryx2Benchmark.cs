@@ -41,6 +41,7 @@ public sealed class Iceoryx2Benchmark
             PayloadSize.Small => await RunThroughputAsync<SmallPayload>(payloadSize, "perf_small"),
             PayloadSize.Medium => await RunThroughputAsync<MediumPayload>(payloadSize, "perf_medium"),
             PayloadSize.Large => await RunThroughputAsync<LargePayload>(payloadSize, "perf_large"),
+            PayloadSize.ExtraLarge => await RunThroughputAsync<ExtraLargePayload>(payloadSize, "perf_xlarge"),
             _ => throw new ArgumentOutOfRangeException(nameof(payloadSize))
         };
     }
@@ -108,27 +109,27 @@ public sealed class Iceoryx2Benchmark
         var warmupComplete = false;
         var benchmarkComplete = false;
 
-        // Producer task
+        // Producer task - uses true zero-copy: Loan() + Send() without copying data
         var producerTask = Task.Run(() =>
         {
             while (!benchmarkComplete)
             {
-                var sendResult = publisher.Send(default(T));
-                if (!sendResult.IsOk)
+                // Zero-copy: loan memory directly from shared memory pool
+                var loanResult = publisher.Loan<T>();
+                if (!loanResult.IsOk)
                 {
                     // Buffer might be full, yield
                     Thread.SpinWait(1);
                     continue;
                 }
 
-                if (warmupComplete)
-                {
-                    stats.RecordMessage();
-                }
+                // Send without copying - the memory is already in shared memory
+                using var sample = loanResult.Unwrap();
+                sample.Send();
             }
         }, cts.Token);
 
-        // Consumer task
+        // Consumer task - counts received messages for real end-to-end throughput
         var consumerTask = Task.Run(() =>
         {
             while (!benchmarkComplete || !cts.Token.IsCancellationRequested)
@@ -143,6 +144,12 @@ public sealed class Iceoryx2Benchmark
                 if (sample != null)
                 {
                     sample.Dispose();
+
+                    // Count received messages (not sent) for real throughput
+                    if (warmupComplete)
+                    {
+                        stats.RecordMessage();
+                    }
                 }
                 else
                 {
@@ -191,6 +198,8 @@ public sealed class Iceoryx2Benchmark
                 payloadSize, "perf_lat_medium"),
             PayloadSize.Large => await RunLatencyAsync<LargePayload, LatencyLargePayload>(
                 payloadSize, "perf_lat_large"),
+            PayloadSize.ExtraLarge => await RunLatencyAsync<ExtraLargePayload, LatencyExtraLargePayload>(
+                payloadSize, "perf_lat_xlarge"),
             _ => throw new ArgumentOutOfRangeException(nameof(payloadSize))
         };
     }
@@ -419,6 +428,19 @@ public unsafe struct LatencyLargePayload : ILatencyPayload
 {
     public long Timestamp;
     public fixed byte Data[65528]; // 65536 - 8 = 65528 bytes
+
+    public readonly long GetTimestamp() => Timestamp;
+    public void SetTimestamp(long timestamp) => Timestamp = timestamp;
+}
+
+/// <summary>
+/// Extra large latency payload with timestamp.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct LatencyExtraLargePayload : ILatencyPayload
+{
+    public long Timestamp;
+    public fixed byte Data[524280]; // 524288 - 8 = 524280 bytes
 
     public readonly long GetTimestamp() => Timestamp;
     public void SetTimestamp(long timestamp) => Timestamp = timestamp;

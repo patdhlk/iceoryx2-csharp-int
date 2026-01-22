@@ -46,13 +46,25 @@ public unsafe struct LargePayload
 }
 
 /// <summary>
+/// Extra large payload: 524288 bytes (512 KB)
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct ExtraLargePayload
+{
+    public long Timestamp;
+    public long SequenceNumber;
+    public fixed byte Data[524272]; // 524288 - 16 = 524272 bytes
+}
+
+/// <summary>
 /// Payload size enumeration for benchmark configuration.
 /// </summary>
 public enum PayloadSize
 {
-    Small,   // 8 bytes
-    Medium,  // 1 KB
-    Large    // 64 KB
+    Small,      // 8 bytes
+    Medium,     // 1 KB
+    Large,      // 64 KB
+    ExtraLarge  // 512 KB
 }
 
 /// <summary>
@@ -71,5 +83,7 @@ public enum BenchmarkTarget
 {
     Channels,
     Iceoryx2,
-    Both
+    Pipes,
+    Both,
+    All
 }
