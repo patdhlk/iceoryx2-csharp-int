@@ -44,7 +44,9 @@
       <IncludeAssets>all</IncludeAssets>
       <!-- This will generate a package dependency instead of including the DLL -->
       <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
-      <SetTargetFramework>TargetFramework=net8.0</SetTargetFramework>
+      <!-- Deliberately no SetTargetFramework: MSBuild's nearest-TFM matching pairs each
+           target framework with the matching Iceoryx2 build. Pinning a single TFM here
+           makes every target framework reference that one build instead. -->
     </ProjectReference>
   </ItemGroup>
 
