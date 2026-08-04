@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Fix `IOX2_SERVICE_ID_LENGTH` (32 → 64) to match the cbindgen-generated C
   header, correcting `Node.List()`'s manual marshal offsets
   [#12](https://github.com/eclipse-iceoryx/iceoryx2-csharp/issues/12)
+* Fix `Iceoryx2.Reactive` referencing the net8.0 `Iceoryx2` build for every
+  target framework; a `SetTargetFramework` pin overrode MSBuild's nearest-TFM
+  matching, so the net9.0 and net10.0 build outputs contained a net8.0
+  `Iceoryx2.dll`
+  [#25](https://github.com/eclipse-iceoryx/iceoryx2-csharp/issues/25)
 
 ### Refactoring
 
